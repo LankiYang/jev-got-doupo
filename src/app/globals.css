@@ -1,0 +1,1021 @@
+/**
+ * Palette and metrics. The scene artwork is the page's ground, so there is one
+ * palette rather than a light one and a dark one.
+ */
+:root {
+  color-scheme: dark;
+  --parchment: #191612;
+  --parchment-raised: #201c16;
+  --ink: #e8dcc4;
+  --ink-soft: #a5947a;
+  --ink-faint: #74664f;
+  --accent: #e9962b;
+  --rule: #3a3227;
+  --danger: #d9694f;
+  --page: 720px;
+  --gutter: 16px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--parchment);
+  color: var(--ink);
+  font-family: var(--font-body), Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  line-height: 1.7;
+  -webkit-text-size-adjust: 100%;
+  /** Garamond's fine strokes read as brittle without greyscale smoothing */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+}
+
+/**
+ * Scene artwork. The negative stacking level puts both layers behind everything
+ * without any other element needing a z-index, and lets the body colour show through
+ * while a picture is missing or still on its way. `SceneBackground` swaps which layer
+ * is lit.
+ */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.backdrop-layer {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 1200ms ease-in-out;
+}
+
+.backdrop-layer.is-showing {
+  opacity: 1;
+}
+
+/**
+ * The artwork is generated bright, so the darkening happens here rather than across
+ * ninety-three files.
+ *
+ * Flat, not graded. It used to lean to 0.68 at top and bottom to protect the header
+ * and the composer, but a twenty-point swing over the last few percent of the height
+ * reads as two black bands rather than as shading. Those two carry their own
+ * legibility instead: the header a drop-shadow, the composer a blurred panel.
+ */
+.backdrop-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop-layer {
+    transition: none;
+  }
+}
+
+/** Page frame */
+.app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  overflow-x: hidden;
+}
+
+.app-centred {
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+}
+
+/**
+ * Header. It sits on the bare picture rather than on a panel, so it carries a shadow:
+ * without one a bright patch of sky swallows the line telling you where you are.
+ */
+.header {
+  flex: 0 0 auto;
+  padding: 6px 0 10px;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+
+/**
+ * The wordmark: real text rather than a masked image, since there is no artwork for
+ * it yet. `text-shadow` comes from `.header`; this only needs the size and the font.
+ * Kept small — this is chrome repeated on every screen after the splash, not a hero,
+ * and every line here is a line the story's own prose does not get.
+ */
+.title {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(1.1rem, 4vw, 1.4rem);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--ink);
+}
+
+.location {
+  margin: 5px 0 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.92rem;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-wrap: balance;
+}
+
+/**
+ * Drawn as a border so the spacing never collapses, and kept dimmer than the labels
+ * on either side of it.
+ */
+.divider {
+  display: inline-block;
+  width: 0;
+  margin: 0 0.85em;
+  border-left: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  vertical-align: -0.1em;
+  height: 0.85em;
+  overflow: hidden;
+  text-indent: -999px;
+}
+
+.labels {
+  margin: 5px 0 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-wrap: balance;
+}
+
+/**
+ * Labels fade in rather than snap. The component keys the span on its own text,
+ * which is what restarts the animation.
+ */
+.fading {
+  display: inline-block;
+  animation: label-fade 620ms ease-out;
+}
+
+@keyframes label-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fading {
+    animation: none;
+  }
+}
+
+.counter {
+  margin: 4px 0 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  color: var(--ink-soft);
+}
+
+/**
+ * Chapter. Sits between the place and the scene labels: a step up in altitude from
+ * "where Jon is right now" to "what this stretch of the story is about."
+ */
+.chapter {
+  margin: 5px 0 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.chapter-goal {
+  margin: 3px 0 0;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--ink-soft);
+  text-wrap: balance;
+}
+
+/** 起承转合: four steps, lit up to the furthest one the chapter has reached. */
+.arc-stages {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.arc-stage {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  transition: color 240ms ease;
+}
+
+.arc-stage.is-reached {
+  color: var(--accent);
+}
+
+/**
+ * Thread above, composer below. The blur keeps a busy patch of artwork from competing
+ * with the text over it, and the border is softened because a full-strength accent
+ * rule outlines a see-through panel too sharply.
+ */
+.chatbox {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: var(--gutter);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 3px;
+  background: rgba(20, 17, 13, 0.62);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+}
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/**
+ * Padding on a scroll container scrolls away with the content, so prose ends up sliced
+ * against the border. The mask fades the top and bottom edges instead. The fade is
+ * kept shorter than the padding, so the first and last lines stay at full strength,
+ * and it doubles as the cue for more text that the hidden scrollbar no longer gives.
+ */
+.viewport {
+  --edge-fade: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 18px;
+  scroll-padding-block: 24px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--edge-fade),
+    #000 calc(100% - var(--edge-fade)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--edge-fade),
+    #000 calc(100% - var(--edge-fade)),
+    transparent 100%
+  );
+}
+
+.prose {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.message-assistant .prose {
+  line-height: 1.75;
+}
+
+.message-user {
+  text-align: right;
+  padding-left: 12%;
+}
+
+/**
+ * The player's move sits in a bubble that inline-block lets hug a short action. The
+ * tint is opaque: a see-through bubble on a see-through panel reads as neither, and a
+ * light hand with the accent over a dark ground leaves it indistinguishable from the
+ * panel behind.
+ */
+.message-user .prose {
+  display: inline-block;
+  max-width: 100%;
+  text-align: left;
+  padding: 9px 14px;
+  border-radius: 12px 12px 3px 12px;
+  background: color-mix(in srgb, var(--accent) 26%, var(--parchment-raised));
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.message-failed {
+  margin: 8px 0 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+
+/** Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-soft);
+}
+
+.loading-line {
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
+/**
+ * The quill pivots about its nib, so the feather sweeps while the writing point stays
+ * put.
+ */
+.quill {
+  flex: 0 0 auto;
+  color: var(--accent);
+  transform-origin: 22% 82%;
+  animation: quill-write 2400ms cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+@keyframes quill-write {
+  0% {
+    transform: rotate(-5deg) translate(0, 0);
+  }
+  45% {
+    transform: rotate(2deg) translate(2px, -0.5px);
+  }
+  55% {
+    transform: rotate(2.5deg) translate(2.2px, -0.5px);
+  }
+  70% {
+    transform: rotate(-1deg) translate(-1px, 0.5px);
+  }
+  100% {
+    transform: rotate(-5deg) translate(0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quill {
+    animation: none;
+  }
+}
+
+/** Splash */
+.splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/**
+ * The ink running along the line the quill is working. It shares the duration and the
+ * easing of `quill-write`, so the two keep time instead of drifting apart on a long wait.
+ */
+.splash-rule {
+  position: relative;
+  width: 190px;
+  height: 1px;
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.splash-rule::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  transform: translateX(-100%);
+  animation: ink-run 2400ms cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+@keyframes ink-run {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-rule::after {
+    animation: none;
+    transform: none;
+    opacity: 0.45;
+  }
+}
+
+.splash-enter {
+  animation: enter-rise 600ms ease-out both;
+}
+
+@keyframes enter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-enter {
+    animation: none;
+  }
+}
+
+/**
+ * The handover: the splash lifts away and the scene fades up from the page colour
+ * underneath it.
+ *
+ * `.app-enter` animates opacity and nothing else on purpose. A transform here would
+ * make `main` the containing block for the `position: fixed` backdrop inside it, and
+ * the artwork would snap into the text column for the length of the animation.
+ */
+.splash.is-leaving {
+  animation: splash-leave 420ms ease-in both;
+}
+
+@keyframes splash-leave {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.app-enter {
+  animation: scene-enter 800ms ease-out both;
+}
+
+@keyframes scene-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash.is-leaving,
+  .app-enter {
+    animation: none;
+  }
+}
+
+/** Composer */
+.composer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--rule);
+}
+
+/**
+ * Suggested actions: the narrator's own, not Jev's. Chips rather than full-width rows,
+ * since there are only ever up to three and the free-text field beneath them is the
+ * point — these are a shortcut into it, not a replacement for it.
+ */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.suggestion {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  padding: 6px 12px;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.suggestion:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.composer-input {
+  width: 100%;
+  max-width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-body), Georgia, serif;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.composer-input::placeholder {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+.composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.counter-over {
+  color: var(--danger);
+}
+
+/** Buttons */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 8px 18px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--parchment);
+}
+
+.button:disabled {
+  opacity: 0.4;
+  border-color: var(--rule);
+  cursor: default;
+}
+
+/** Ending */
+.ended {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 16px;
+  text-align: center;
+  border-top: 1px solid var(--rule);
+}
+
+.ended-line {
+  margin: 0;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+/**
+ * Music. This row sits on bare artwork rather than on the panel, so it carries a
+ * shadow of its own: `drop-shadow` rather than `text-shadow`, because what needs
+ * separating from the picture is icon paths and equaliser bars rather than glyphs.
+ */
+.controls {
+  order: -1;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  padding-top: 4px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.75));
+}
+
+.music {
+  display: flex;
+  align-items: center;
+}
+
+.equaliser {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  padding: 0 2px;
+}
+
+.equaliser i {
+  width: 2px;
+  height: 25%;
+  border-radius: 1px;
+  background: var(--ink-faint);
+  transition:
+    height 240ms ease,
+    background-color 240ms ease;
+}
+
+.equaliser.is-playing i {
+  background: var(--accent);
+  animation: equaliser-bar 1100ms ease-in-out infinite;
+}
+
+.equaliser.is-playing i:nth-child(2) {
+  animation-delay: -370ms;
+}
+
+.equaliser.is-playing i:nth-child(3) {
+  animation-delay: -740ms;
+}
+
+@keyframes equaliser-bar {
+  0%,
+  100% {
+    height: 25%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .equaliser.is-playing i {
+    animation: none;
+    height: 60%;
+  }
+}
+
+/**
+ * One step up from the faintest ink, because these buttons are read against whatever
+ * the scene is doing behind them rather than against a known page colour.
+ */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  color: var(--ink-soft);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.icon-button:hover {
+  color: var(--accent);
+}
+
+.music audio {
+  display: none;
+}
+
+/** Notices */
+.notice {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+
+/** Hidden, not disabled: the thread still scrolls by wheel, touch and keyboard. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+
+/**
+ * Jev reading panel.
+ *
+ * The story keeps the centre; the judgement sits beside it on wide screens. Below the
+ * breakpoint the panel moves under the story rather than shrinking both columns, since
+ * the bars stop being readable before the prose does.
+ */
+.stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.jev-aside {
+  display: none;
+}
+
+@media (min-width: 1180px) {
+  .app {
+    max-width: 1180px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 336px;
+    grid-template-rows: minmax(0, 1fr);
+    gap: var(--gutter);
+    /* Grid items stretch to the row's height by default. `.stage` needs that: its
+       chatbox fills the remaining space and scrolls internally, the way it already
+       does in the single-column flex layout below this breakpoint. `.jev-aside`
+       doesn't need to opt out — its own max-height and overflow-y already cap it,
+       and sticky doesn't care whether the box is taller than its content. */
+  }
+
+  /*
+   * Splash, the failed-to-load screen, and the chat before Jev's first reading all
+   * share `.app` for its width and height, but have one child, not two: `.jev-aside`
+   * renders nothing until there is a reading to show. Left in the grid above, that
+   * lone child centres inside the empty 1fr track rather than the page, since a
+   * hidden 336px second column drags the centre line off to the left. `:has()` opts
+   * back out to a single flexible column whenever the second column is actually empty,
+   * rather than only for the two screens that were known to hit this at the time.
+   */
+  .app.app-centred,
+  .app:not(:has(.jev-aside)) {
+    display: flex;
+    max-width: var(--page);
+  }
+
+  .stage {
+    min-height: 0;
+  }
+
+  .jev-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: sticky;
+    top: var(--gutter);
+    max-height: calc(100dvh - 2 * var(--gutter));
+    overflow-y: auto;
+    padding: 16px 16px 14px;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    border-radius: 3px;
+    background: rgba(20, 17, 13, 0.72);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    scrollbar-width: thin;
+  }
+}
+
+/* Below the breakpoint the panel is redundant with the header, which already names
+   the place, mood, beat and danger. Keeping the prose uncluttered wins. */
+
+.jev-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 2px;
+  font-family: var(--font-display), serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/** Shown beside a panel's title while that panel's own turn is still resolving. */
+.jev-judging {
+  font-family: var(--font-display), serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  color: var(--ink-faint);
+  animation: judging-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes judging-pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jev-judging {
+    animation: none;
+  }
+}
+
+.jev-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.jev-question {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.jev-question-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.jev-question-name {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.jev-confidence {
+  font-family: var(--font-mono, ui-monospace), monospace;
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.jev-choice {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.jev-score-raw {
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.jev-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jev-bar {
+  display: grid;
+  grid-template-columns: 1fr 60px 34px;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.jev-bar.is-chosen {
+  color: var(--ink);
+}
+
+.jev-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jev-bar-track {
+  display: block;
+  height: 5px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink-faint) 26%, transparent);
+  overflow: hidden;
+}
+
+.jev-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.25s ease-out;
+}
+
+.jev-bar.is-chosen .jev-bar-fill {
+  background: var(--accent);
+}
+
+.jev-bar:not(.is-chosen) .jev-bar-fill {
+  background: color-mix(in srgb, var(--accent) 45%, var(--rule));
+}
+
+.jev-bar-fill.is-low {
+  background: var(--danger);
+}
+
+.jev-bar-value {
+  font-family: var(--font-mono, ui-monospace), monospace;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.jev-meter {
+  display: grid;
+  grid-template-columns: 1fr 90px 34px;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.jev-meter-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/**
+ * Stats panel: the running gauges (affection, scene danger, tension, morality, gold).
+ * Shares `.jev-meter`'s three-column rhythm and `.jev-bar-track`/`.jev-bar-fill`'s bar,
+ * so it reads as one family with the Jev panel it sits beside rather than a bolted-on
+ * second widget.
+ */
+.stats-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.stat-gauge {
+  display: grid;
+  grid-template-columns: 1fr 90px 44px;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/** Gold has no bar, so its row is just a label and a number, right-aligned like the
+ *  other rows' values so the column still reads as one list. */
+.stat-count {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.stat-count-value {
+  font-family: var(--font-mono, ui-monospace), monospace;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.stat-trend {
+  margin-left: 3px;
+  font-size: 9px;
+  color: var(--ink-faint);
+}
+
+.jev-cost {
+  display: flex;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono, ui-monospace), monospace;
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jev-bar-fill {
+    transition: none;
+  }
+}
