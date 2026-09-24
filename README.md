@@ -59,7 +59,7 @@ pnpm dev                       # http://localhost:3000
 | `TYPESAFE_MODEL` | `jev-latest` | Pin a version if you tune thresholds against one |
 | `OPENROUTER_MODEL` | `openai/gpt-5.6-luna` | Any OpenRouter chat model |
 | `STORY_TTL_DAYS` | `7` | An untouched story expires on its own |
-| `MAX_TURNS` | `15` | Turn 15 is narrated as a closing chapter |
+| `MAX_TURNS` | `100000` | Effectively unlimited, so a tale runs as long as the reader keeps playing. Set it to cap a session; the last turn is narrated as a closing chapter |
 | `MAX_TURNS_PER_MINUTE` | `10` | Per caller |
 | `MAX_TURNS_PER_IP_PER_DAY` | `60` | Per caller. A new tale mints a new session, so only the address is durable |
 | `MAX_TURNS_PER_DAY` | `500` | Process-wide spend cap |
@@ -86,7 +86,7 @@ an `{ "_tag": "error", "cause": "<code>" }` event carrying the same code.
 
 ## Notes
 
-- Play is capped at 15 turns per session and 200 characters per action — both to bound spend
+- A session has no practical turn limit, but actions are capped at 200 characters — to bound spend
   on a public demo, alongside per-IP rate limiting and a daily budget.
 - Your action is passed to the narrator as delimited **data**, never as instructions, and
   `inFiction` checks the result. Attempts to talk to the narrator get redirected in-world
