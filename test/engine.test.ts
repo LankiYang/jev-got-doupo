@@ -1,11 +1,13 @@
-import { Array as Arr, Effect, Layer, Option } from "effect";
+import { Array as Arr, Effect, Layer, Option, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import * as Budget from "@/core/Budget";
 import * as Decision from "@/core/Decision";
+import { Narrator } from "@/core/Narrator";
 import * as Position from "@/core/Position";
 import * as CannedJev from "@/core/providers/CannedJev";
 import * as CannedNarrator from "@/core/providers/CannedNarrator";
 import * as MemoryStore from "@/core/providers/MemoryStore";
+import * as Prompt from "@/core/Prompt";
 import * as Rules from "@/core/Rules";
 import * as StoryEngine from "@/core/StoryEngine";
 import { StoryStore } from "@/core/StoryStore";
@@ -17,11 +19,12 @@ const world = (
     readonly maxTurns?: number;
     readonly maxTurnsPerDay?: number;
     readonly slipOnce?: boolean;
+    readonly narrator?: Layer.Layer<Narrator>;
   } = {},
 ) =>
   Layer.mergeAll(
     CannedJev.layer,
-    CannedNarrator.layer({ slipOnce: options.slipOnce }),
+    options.narrator ?? CannedNarrator.layer({ slipOnce: options.slipOnce }),
     MemoryStore.layer,
     Budget.layer({ maxTurnsPerDay: options.maxTurnsPerDay ?? 1000 }),
     Rules.layer({ maxTurns: options.maxTurns ?? 15 }),
@@ -170,5 +173,83 @@ describe("saved turns replay", () => {
     expect(saved.decision.position).toEqual(Position.at("wutan-city"));
 
     expect(Decision.resolve(saved.answers)).toEqual(saved.decision);
+  });
+});
+
+/** The canned narrator, made to pause before it writes, so two turns can overlap. */
+const slowNarrator = Layer.effect(
+  Narrator,
+  Effect.gen(function* () {
+    const canned = yield* Narrator;
+    return {
+      ...canned,
+      narrateStream: (messages) =>
+        Stream.concat(
+          Stream.drain(Stream.fromEffect(Effect.sleep("30 millis"))),
+          canned.narrateStream(messages),
+        ),
+    };
+  }),
+).pipe(Layer.provide(CannedNarrator.layer()));
+
+/** A narrator that writes only the suggested-actions block and no scene at all. */
+const blankNarrator = Layer.succeed(Narrator, {
+  narrate: () => Effect.succeed(""),
+  narrateStream: () => Stream.make("  \n", Prompt.optionsMarker, "\n我去藏书阁\n"),
+});
+
+describe("one turn at a time", () => {
+  it("lets only one of two overlapping turns through, and keeps it", async () => {
+    const program = Effect.gen(function* () {
+      const outcomes = yield* Effect.all(
+        [
+          Effect.either(StoryEngine.playTurn(sessionId, 0, "I drill my forms in the yard.")),
+          Effect.either(StoryEngine.playTurn(sessionId, 0, "I go to see Father.")),
+        ],
+        { concurrency: "unbounded" },
+      );
+      return { outcomes, state: yield* StoryEngine.openStory(sessionId) };
+    });
+
+    const { outcomes, state } = await Effect.runPromise(
+      Effect.provide(program, world({ narrator: slowNarrator })),
+    );
+
+    const failures = outcomes
+      .filter((outcome) => outcome._tag === "Left")
+      .map((outcome) => outcome.left._tag);
+    expect(failures).toEqual(["TurnConflict"]);
+    expect(state.turns.length).toBe(1);
+  });
+
+  it("frees the session once a turn is refused, so the right one can still play", async () => {
+    const program = Effect.gen(function* () {
+      const refused = yield* Effect.flip(StoryEngine.playTurn(sessionId, 3, "I wait by the fire."));
+      const played = yield* StoryEngine.playTurn(sessionId, 0, "I wait by the fire.");
+      return { refused, played };
+    });
+
+    const { refused, played } = await Effect.runPromise(Effect.provide(program, world()));
+    expect(refused._tag).toBe("TurnConflict");
+    expect(played.turn).toBe(1);
+  });
+});
+
+describe("empty prose", () => {
+  it("fails the turn rather than saving a blank scene, and frees the session", async () => {
+    const program = Effect.gen(function* () {
+      const error = yield* Effect.flip(StoryEngine.playTurn(sessionId, 0, "I wait by the fire."));
+      const stored = yield* Effect.flatMap(StoryStore, (store) => store.load(sessionId));
+      const again = yield* Effect.flip(StoryEngine.playTurn(sessionId, 0, "I wait by the fire."));
+      return { error, stored, again };
+    });
+
+    const { error, stored, again } = await Effect.runPromise(
+      Effect.provide(program, world({ narrator: blankNarrator })),
+    );
+    expect(error._tag).toBe("NarratorError");
+    expect(Option.isNone(stored)).toBe(true);
+    // Refused for the same reason, not for a lock the first attempt left behind.
+    expect(again._tag).toBe("NarratorError");
   });
 });

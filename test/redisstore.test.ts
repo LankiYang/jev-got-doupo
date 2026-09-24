@@ -4,9 +4,16 @@ import { Array as Arr, ConfigProvider, Context, Effect, HashMap, Layer, Option, 
 import { describe, expect, it } from "vitest";
 import * as RedisStore from "@/core/providers/RedisStore";
 import { layerOver } from "@/core/providers/KeyValueStoryStore";
-import { fromOps, keyPrefix, type RedisOps } from "@/core/providers/RedisKeyValueStore";
+import {
+  fromOps,
+  keyPrefix,
+  lockFromOps,
+  lockPrefix,
+  type RedisOps,
+} from "@/core/providers/RedisKeyValueStore";
 import * as Story from "@/core/Story";
 import { StoryStore } from "@/core/StoryStore";
+import * as TurnLock from "@/core/TurnLock";
 import { playedTurn, sessionId } from "./helpers";
 
 /** A Redis in a `Ref`: the same five commands, no socket and no container. */
@@ -20,6 +27,14 @@ const fakeOps = (ref: Ref.Ref<HashMap.HashMap<string, string>>): RedisOps => ({
     ),
   removeAll: (keys) =>
     Ref.update(ref, (map) => Arr.reduce(keys, map, (rest, key) => HashMap.remove(rest, key))),
+  setIfAbsent: (key, value) =>
+    Ref.modify(ref, (map) =>
+      HashMap.has(map, key) ? [false, map] : [true, HashMap.set(map, key, value)],
+    ),
+  removeIfEquals: (key, value) =>
+    Ref.update(ref, (map) =>
+      Option.contains(HashMap.get(map, key), value) ? HashMap.remove(map, key) : map,
+    ),
 });
 
 /** A Redis nobody can reach; every command fails the way a dropped socket would. */
@@ -29,6 +44,8 @@ const deadOps: RedisOps = {
   remove: () => Effect.fail(unreachable("remove")),
   keys: () => Effect.fail(unreachable("keys")),
   removeAll: () => Effect.fail(unreachable("removeAll")),
+  setIfAbsent: () => Effect.fail(unreachable("setIfAbsent")),
+  removeIfEquals: () => Effect.fail(unreachable("removeIfEquals")),
 };
 
 function unreachable(method: string): SystemError {
@@ -163,6 +180,65 @@ describe("RedisKeyValueStore.fromOps", () => {
   });
 });
 
+describe("RedisKeyValueStore.lockFromOps", () => {
+  it("holds a session for one turn at a time", async () => {
+    const outcome = await Effect.runPromise(
+      Effect.gen(function* () {
+        const ref = yield* Ref.make(HashMap.empty<string, string>());
+        const lock = lockFromOps(fakeOps(ref), TurnLock.holdFor);
+        const first = yield* lock.acquire(sessionId);
+        const whileHeld = yield* lock.acquire(sessionId);
+        const keys = Arr.fromIterable(HashMap.keys(yield* Ref.get(ref)));
+        if (Option.isSome(first)) yield* first.value;
+        const afterRelease = yield* lock.acquire(sessionId);
+        return { first, whileHeld, keys, afterRelease };
+      }),
+    );
+
+    expect(Option.isSome(outcome.first)).toBe(true);
+    expect(Option.isNone(outcome.whileHeld)).toBe(true);
+    expect(outcome.keys).toEqual([`${lockPrefix}${sessionId}`]);
+    expect(Option.isSome(outcome.afterRelease)).toBe(true);
+  });
+
+  it("does not release a hold that has since passed to another turn", async () => {
+    const stillHeld = await Effect.runPromise(
+      Effect.gen(function* () {
+        const ref = yield* Ref.make(HashMap.empty<string, string>());
+        const lock = lockFromOps(fakeOps(ref), TurnLock.holdFor);
+        const stale = yield* lock.acquire(sessionId);
+        // The first hold expires, and a second turn takes the session.
+        yield* Ref.update(ref, HashMap.remove(`${lockPrefix}${sessionId}`));
+        yield* lock.acquire(sessionId);
+        if (Option.isSome(stale)) yield* stale.value;
+        return Option.isNone(yield* lock.acquire(sessionId));
+      }),
+    );
+
+    expect(stillHeld).toBe(true);
+  });
+
+  it("reports a dead Redis as a corrupt story rather than a defect", async () => {
+    const failure = await Effect.runPromise(
+      Effect.flip(lockFromOps(deadOps, TurnLock.holdFor).acquire(sessionId)),
+    );
+
+    expect(failure._tag).toBe("StoryCorrupt");
+  });
+
+  it("is not counted as a story", async () => {
+    const size = await Effect.runPromise(
+      Effect.gen(function* () {
+        const ref = yield* Ref.make(HashMap.empty<string, string>());
+        yield* lockFromOps(fakeOps(ref), TurnLock.holdFor).acquire(sessionId);
+        return yield* fromOps(fakeOps(ref)).size;
+      }),
+    );
+
+    expect(size).toBe(0);
+  });
+});
+
 /** Building the layer costs nothing: `lazyConnect` means no socket is opened. */
 const buildStore = (env: ReadonlyArray<readonly [string, string]>) =>
   Effect.scoped(Layer.build(RedisStore.layerConfig)).pipe(
@@ -186,5 +262,6 @@ describe("RedisStore.layerConfig", () => {
     const context = await Effect.runPromise(buildStore([["REDIS_URL", "redis://127.0.0.1:6379"]]));
 
     expect(Context.get(context, StoryStore)).toBeDefined();
+    expect(Context.get(context, TurnLock.TurnLock)).toBeDefined();
   });
 });

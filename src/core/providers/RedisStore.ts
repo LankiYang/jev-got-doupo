@@ -8,11 +8,13 @@ import {
   expirySeconds,
   fromOps,
   keyPrefix,
+  lockFromOps,
   redisError,
   type RedisOps,
   ttl,
 } from "@/core/providers/RedisKeyValueStore";
 import type { StoryStore } from "@/core/StoryStore";
+import { holdFor, TurnLock } from "@/core/TurnLock";
 
 export interface Options {
   readonly url: string;
@@ -26,6 +28,10 @@ const commandTimeoutMillis = 2_000;
 const deadline = Duration.seconds(3);
 
 const scanBatch = 500;
+
+/** Deletes a lock only while it is still the caller's, so an expired hold is never freed twice. */
+const releaseScript =
+  'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end';
 
 /**
  * ioredis reports a refused connection on the client's `error` event and then fails the
@@ -67,6 +73,13 @@ const ops = (client: Redis, expiry: number): RedisOps => {
     remove: (key) => Effect.asVoid(call("remove", () => client.del(key))),
     keys: () => scanFrom("0", []),
     removeAll: (keys) => Effect.asVoid(call("removeAll", () => client.del([...keys]))),
+    setIfAbsent: (key, value, ttlMillis) =>
+      Effect.map(
+        call("setIfAbsent", () => client.set(key, value, "PX", ttlMillis, "NX")),
+        (reply) => reply === "OK",
+      ),
+    removeIfEquals: (key, value) =>
+      Effect.asVoid(call("removeIfEquals", () => client.eval(releaseScript, 1, key, value))),
   };
 };
 
@@ -94,10 +107,18 @@ export const make = Effect.fn("RedisStore.make")(function* (options: Options) {
   return ops(client, expirySeconds(options.ttl));
 });
 
-export const layer = (options: Options): Layer.Layer<StoryStore, PlatformError> =>
-  layerOver(Layer.scoped(KeyValueStore.KeyValueStore, Effect.map(make(options), fromOps)));
+/** One client behind both the stories and the turn lock that guards them. */
+export const layer = (options: Options): Layer.Layer<StoryStore | TurnLock, PlatformError> =>
+  Layer.unwrapScoped(
+    Effect.map(make(options), (redis) =>
+      Layer.merge(
+        layerOver(Layer.succeed(KeyValueStore.KeyValueStore, fromOps(redis))),
+        Layer.succeed(TurnLock, lockFromOps(redis, holdFor)),
+      ),
+    ),
+  );
 
-export const layerConfig: Layer.Layer<StoryStore, ConfigError.ConfigError | PlatformError> =
+export const layerConfig: Layer.Layer<StoryStore | TurnLock, ConfigError.ConfigError | PlatformError> =
   Layer.unwrapEffect(
     Effect.map(
       Config.all({

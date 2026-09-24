@@ -79,8 +79,10 @@ pnpm typecheck
 | `GET /api/health` | `{ ok: true }` |
 
 All model calls happen server-side; the browser never sees a key. `turn` is the number of
-turns the client has seen — a mismatch answers `409 turn_conflict`, which is how two open
-tabs are kept honest without a lock.
+turns the client has seen — a mismatch answers `409 turn_conflict`, and so does a turn sent
+while another is still being written for the same session, which is how two open tabs are
+kept honest. Past the first byte the status is already 200, so a later failure arrives as
+an `{ "_tag": "error", "cause": "<code>" }` event carrying the same code.
 
 ## Notes
 
