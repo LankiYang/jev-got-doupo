@@ -3,7 +3,7 @@ import * as ArcStage from "@/core/ArcStage";
 import { Budget } from "@/core/Budget";
 import * as Chapter from "@/core/Chapter";
 import * as Decision from "@/core/Decision";
-import { type AppError, OutOfFiction, StoryEnded, TurnConflict } from "@/core/Errors";
+import { type AppError, NarratorError, OutOfFiction, StoryEnded, TurnConflict } from "@/core/Errors";
 import { Narrator } from "@/core/Narrator";
 import { QuestionModel } from "@/core/QuestionModel";
 import * as Oracle from "@/core/Oracle";
@@ -13,6 +13,7 @@ import { toStored } from "@/core/Question";
 import { Rules } from "@/core/Rules";
 import * as Story from "@/core/Story";
 import { StoryStore } from "@/core/StoryStore";
+import { TurnLock } from "@/core/TurnLock";
 
 export interface TurnResult {
   readonly decision: Decision.Decision;
@@ -162,8 +163,28 @@ export const openStory = Effect.fn("StoryEngine.openStory")(function* (sessionId
  * the world, with a stricter reminder in the prompt. A second slip is accepted rather
  * than failing the turn, and the rejected attempt rides on `OutOfFiction` so the
  * recovery has the prose and the answers it needs.
+ *
+ * The session's `TurnLock` is taken before the story is read and held until the
+ * returned stream ends, however it ends: a turn that is already running makes this
+ * one a `TurnConflict` rather than a second writer.
  */
 export const playTurnStream = Effect.fn("StoryEngine.playTurnStream")(
+  function* (sessionId: Story.SessionId, turn: number, action: string) {
+    const lock = yield* TurnLock;
+    const held = yield* lock.acquire(sessionId);
+    if (Option.isNone(held)) {
+      // The running turn is about to leave the story one past what this client saw.
+      return yield* new TurnConflict({ expected: turn + 1, received: turn });
+    }
+    const release = held.value;
+    const stream = yield* startTurn(sessionId, turn, action).pipe(Effect.onError(() => release));
+    return stream.pipe(Stream.ensuring(release));
+  },
+  (effect, sessionId, turn) => effect.pipe(Effect.annotateLogs({ sessionId, turn })),
+);
+
+/** Everything a turn does once it holds the session's lock. */
+const startTurn = Effect.fnUntraced(
   function* (sessionId: Story.SessionId, turn: number, action: string) {
     const { maxTurns } = yield* Rules;
     const store = yield* StoryStore;
@@ -208,6 +229,10 @@ export const playTurnStream = Effect.fn("StoryEngine.playTurnStream")(
 
           const settle = Effect.gen(function* () {
             const { narration, optionsBlock } = splitOptions(yield* Ref.get(collected));
+            // Nothing to judge or keep: saving it would leave a blank scene in the story.
+            if (narration.length === 0) {
+              return yield* new NarratorError({ message: "the narrator returned empty prose" });
+            }
             const drafted = parseOptions(optionsBlock);
             const judgement = yield* Oracle.judge(Oracle.stateFor(state, action, narration, drafted));
             const optionsSoundNoul = judgement.answers.optionsSound.noul;
@@ -362,7 +387,6 @@ export const playTurnStream = Effect.fn("StoryEngine.playTurnStream")(
       }),
     );
   },
-  (effect, sessionId, turn) => effect.pipe(Effect.annotateLogs({ sessionId, turn })),
 );
 
 /**

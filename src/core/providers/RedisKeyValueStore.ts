@@ -1,10 +1,11 @@
 import { KeyValueStore } from "@effect/platform";
 import { type PlatformError, SystemError } from "@effect/platform/Error";
 import { Config, Duration, Effect, Option } from "effect";
-import { describeCause } from "@/core/Errors";
+import { describeCause, StoryCorrupt } from "@/core/Errors";
+import type { TurnLockService } from "@/core/TurnLock";
 
 /**
- * The five commands a story store needs from Redis, so nothing above this interface
+ * The commands a story store and its turn lock need from Redis, so nothing above this interface
  * depends on a particular client. Namespacing, expiry, encoding and error mapping are
  * shared here rather than written per client.
  */
@@ -15,13 +16,24 @@ export interface RedisOps {
   /** This app's keys, already narrowed to `keyPrefix`, never the whole database. */
   readonly keys: () => Effect.Effect<ReadonlyArray<string>, PlatformError>;
   readonly removeAll: (keys: ReadonlyArray<string>) => Effect.Effect<void, PlatformError>;
+  /** `SET key value PX ttl NX`: true when this call created the key. */
+  readonly setIfAbsent: (
+    key: string,
+    value: string,
+    ttlMillis: number,
+  ) => Effect.Effect<boolean, PlatformError>;
+  /** Deletes the key only while it still holds `value`, in one round trip. */
+  readonly removeIfEquals: (key: string, value: string) => Effect.Effect<void, PlatformError>;
 }
 
 /**
- * Every key this app writes starts here, so `clear` and `size` stay honest on a Redis
- * shared with something else. Nothing in the app issues `FLUSHDB`.
+ * Every story key this app writes starts here, so `clear` and `size` stay honest on a
+ * Redis shared with something else. Nothing in the app issues `FLUSHDB`.
  */
 export const keyPrefix = "story:";
+
+/** Outside `keyPrefix`, so a held lock never counts as a story in `size` or `clear`. */
+export const lockPrefix = "story-lock:";
 
 /** How long an untouched story lives, so an abandoned session expires on its own. */
 export const ttl: Config.Config<Duration.Duration> = Config.integer("STORY_TTL_DAYS").pipe(
@@ -89,3 +101,24 @@ export const fromOps = (ops: RedisOps): KeyValueStore.KeyValueStore =>
     ),
     size: Effect.map(ops.keys(), (keys) => keys.length),
   });
+
+/**
+ * A `TurnLock` over `RedisOps`, shared by every process on the same Redis. The token
+ * is what keeps a turn that outlived `holdFor` from releasing the next turn's hold.
+ */
+export const lockFromOps = (ops: RedisOps, holdFor: Duration.Duration): TurnLockService => ({
+  acquire: (id) =>
+    Effect.gen(function* () {
+      const key = lockPrefix + id;
+      const token = crypto.randomUUID();
+      const granted = yield* ops.setIfAbsent(key, token, Duration.toMillis(holdFor));
+      if (!granted) return Option.none();
+      // Best effort: a release that cannot reach Redis leaves the hold to expire.
+      const release = ops.removeIfEquals(key, token).pipe(
+        Effect.catchAll((cause) => Effect.logWarning(`could not release ${key}: ${cause.message}`)),
+      );
+      return Option.some(release);
+    }).pipe(
+      Effect.mapError((cause) => new StoryCorrupt({ sessionId: id, message: describeCause(cause) })),
+    ),
+});

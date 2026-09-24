@@ -32,6 +32,9 @@ const failureOf: (error: AppError) => Failure = Match.type<AppError>().pipe(
   Match.exhaustive,
 );
 
+/** The `error` code a failure reports, for a response that can no longer carry a status. */
+export const codeOf = (error: AppError): string => failureOf(error).body.error;
+
 /** A cause with no typed failure in it: the client went away, or the app has a bug. */
 const fromDefect = (cause: Cause.Cause<AppError>): Response => {
   if (Cause.isInterruptedOnly(cause)) return new Response(null, { status: 499 });
