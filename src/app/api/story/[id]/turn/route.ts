@@ -10,6 +10,7 @@ import * as views from "@/server/views";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const readJson = (request: Request) =>
   Effect.tryPromise({
