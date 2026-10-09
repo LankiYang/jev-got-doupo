@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
    * table at require time, so the server calls it rather than bundling it.
    */
   serverExternalPackages: ["ioredis"],
+  /**
+   * Without this, the dev server blocks cross-origin requests to HMR from the ngrok
+   * tunnel, which throws the client into a reconnect-and-reload loop that never lets
+   * the opening scene finish loading.
+   */
+  allowedDevOrigins: ["negative-cogwheel-debrief.ngrok-free.dev"],
 };
 
 export default nextConfig;
